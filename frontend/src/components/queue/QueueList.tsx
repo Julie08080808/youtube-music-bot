@@ -1,4 +1,3 @@
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { QueueItem } from "./QueueItem";
 import type { Track } from "@/types";
 
@@ -14,18 +13,16 @@ export const QueueList = ({
   removingIndex,
 }: QueueListProps) => {
   return (
-    <ScrollArea maxHeight="400px">
-      <div className="space-y-2">
-        {queue.map((track, index) => (
-          <QueueItem
-            key={`${track.videoId}-${index}`}
-            track={track}
-            index={index}
-            onRemove={onRemove}
-            isRemoving={removingIndex === index}
-          />
-        ))}
-      </div>
-    </ScrollArea>
+    <div className="space-y-2 p-4">
+      {queue.map((track, index) => (
+        <QueueItem
+          key={`${track.videoId}-${index}`}
+          track={track}
+          index={index}
+          onRemove={onRemove}
+          isRemoving={removingIndex === index}
+        />
+      ))}
+    </div>
   );
 };

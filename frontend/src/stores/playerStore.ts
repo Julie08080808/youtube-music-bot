@@ -24,6 +24,14 @@ interface PlayerStore {
   searchResults: Track[];
   setSearchResults: (results: Track[]) => void;
   clearSearchResults: () => void;
+
+  // 手機版搜尋狀態
+  isMobileSearchOpen: boolean;
+  setMobileSearchOpen: (open: boolean) => void;
+
+  // 手機版 TabBar 狀態
+  mobileActiveTab: "search" | "lyrics" | "queue" | "library";
+  setMobileActiveTab: (tab: "search" | "lyrics" | "queue" | "library") => void;
 }
 
 export const usePlayerStore = create<PlayerStore>((set) => ({
@@ -54,4 +62,12 @@ export const usePlayerStore = create<PlayerStore>((set) => ({
   searchResults: [],
   setSearchResults: (results) => set({ searchResults: results }),
   clearSearchResults: () => set({ searchResults: [] }),
+
+  // 手機版搜尋狀態
+  isMobileSearchOpen: false,
+  setMobileSearchOpen: (open) => set({ isMobileSearchOpen: open }),
+
+  // 手機版 TabBar 狀態
+  mobileActiveTab: "search",
+  setMobileActiveTab: (tab) => set({ mobileActiveTab: tab }),
 }));

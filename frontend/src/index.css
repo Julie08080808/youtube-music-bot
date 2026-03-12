@@ -10,3 +10,61 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* 安全區域支援 */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .pb-safe-plus-20 {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* 標籤切換淡入淡出 */
+.tab-content-enter {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 手機版搜尋頁面從右側滑入/滑出 */
+.mobile-search-enter {
+  animation: slideInFromRight 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.mobile-search-exit {
+  animation: slideOutToRight 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutToRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
