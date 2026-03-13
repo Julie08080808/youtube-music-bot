@@ -84,7 +84,7 @@ export const TabBar = () => {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800">
+    <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-700/50">
       <div className="grid grid-cols-4 min-h-20 pb-safe">
         {tabs.map((tab) => (
           <button
@@ -93,7 +93,7 @@ export const TabBar = () => {
             className={`flex flex-col items-center justify-center gap-1 transition-colors ${
               activeTab === tab.id
                 ? "text-blue-500"
-                : "text-gray-500 dark:text-gray-400"
+                : "text-gray-500 dark:text-gray-300"
             }`}
           >
             <div

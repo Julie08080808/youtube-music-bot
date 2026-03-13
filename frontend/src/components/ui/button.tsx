@@ -22,11 +22,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           size === "lg" && "h-11 px-6 text-base",
           // 變體
           variant === "default" &&
-            "bg-gray-900 text-white hover:bg-gray-800 active:bg-gray-700",
+            "bg-gray-900 text-white hover:bg-gray-800 active:bg-gray-700 dark:bg-gray-50 dark:text-gray-900 dark:hover:bg-gray-200 dark:active:bg-gray-300",
           variant === "ghost" &&
             "hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-800 dark:hover:text-gray-50",
           variant === "outline" &&
-            "bg-white border border-gray-200 text-gray-900 hover:bg-gray-50",
+            "bg-white border border-gray-200 text-gray-900 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700/50 dark:text-gray-50 dark:hover:bg-gray-800",
           variant === "destructive" &&
             "bg-gray-900 text-white hover:bg-gray-800 active:bg-gray-700",
           className,

@@ -46,7 +46,7 @@ export const MiniPlayer = () => {
 
   return (
     <div
-      className={`fixed bottom-[84px] left-0 right-0 z-50 lg:hidden bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 transition-colors`}
+      className={`fixed bottom-[84px] left-0 right-0 z-50 lg:hidden bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-700/50 transition-colors`}
     >
       {/* 進度條 */}
       <div className="h-1 bg-gray-200 dark:bg-gray-700">
@@ -72,7 +72,7 @@ export const MiniPlayer = () => {
               <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">
                 {currentTrack.title}
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+              <p className="text-xs text-gray-500 dark:text-gray-300 truncate">
                 {currentTrack.artist}
               </p>
             </div>

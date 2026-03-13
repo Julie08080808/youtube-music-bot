@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { serveStatic } from "hono/bun";
 import api from "./routes/api.ts";
 import {
@@ -9,6 +10,17 @@ import {
 } from "./websocket/handler.ts";
 
 const app = new Hono();
+
+// 添加 CORS 支持（必須放在 serveStatic 之前）
+app.use(
+  "/*",
+  cors({
+    origin: "*",
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  }),
+);
 
 // 提供靜態檔案
 // 生產環境使用 frontend/dist，開發環境使用 public
