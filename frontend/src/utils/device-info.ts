@@ -1,4 +1,4 @@
-import type { SyncDeviceKind, SyncDeviceMetadata } from "@/types/library";
+import type { SyncDeviceKind, SyncDeviceMetadata } from "../types/library";
 
 const MOBILE_UA_PATTERN =
   /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini|Mobile/i;
