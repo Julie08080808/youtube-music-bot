@@ -1,13 +1,13 @@
 import type { ReleaseNotesEntry } from "../types/index.ts";
 
 const fallbackReleaseNotesByVersion: Record<string, ReleaseNotesEntry> = {
-  "0.7.5": {
-    version: "0.7.5",
+  "0.7.6": {
+    version: "0.7.6",
     title: "Discover 體驗定稿與播放增強",
     publishedAt: "2026-03-28",
     status: "preview",
     summary:
-      "把 Discover 補成更完整的探索入口，加入音樂影片焦點展示、榜單化熱門點播與更穩定的播放體驗。",
+      "把 Discover 補成更完整的探索入口，加入音樂影片焦點展示、榜單化熱門點播，以及更聰明的自動 Mix 與播放調整。",
     sections: [
       {
         category: "added",
@@ -27,6 +27,7 @@ const fallbackReleaseNotesByVersion: Record<string, ReleaseNotesEntry> = {
           "本站熱門點播改為榜單式版型，加入冠軍焦點卡與後續名次列表，更容易快速理解站內熱門內容。",
           "Discover 卡片支援更完整的專輯、播放清單與歌手導覽，專輯與播放清單卡片也會預先露出曲目 preview。",
           "桌面側欄 idle state 會依目前所在區域切換文案，Discover 模式下會直接提示從市場探索、熱門點播或新專輯開始播放。",
+          "Auto Mix / radio 補歌現在會優先使用待播佇列最後一首歌當作 seed，再依序回退到目前播放與上一首歌曲，讓後續推薦更貼近整體播放方向。",
         ],
       },
       {

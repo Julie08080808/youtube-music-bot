@@ -351,5 +351,82 @@ describe("QueueService - seekTo functionality", () => {
         profileName: "Daphne",
       });
     });
+
+    test("should prefer the last queued track as the auto mix seed", () => {
+      const internalQueueService = queueService as unknown as {
+        queue: Track[];
+        currentTrack: Track | null;
+        lastPlayedTrack: Track | null;
+        resolveAutoMixSeedTrack: () => Track | null;
+      };
+
+      internalQueueService.currentTrack = track("current", "Current");
+      internalQueueService.lastPlayedTrack = track("last", "Last");
+      internalQueueService.queue = [
+        track("queued-1", "Queued 1"),
+        track("queued-2", "Queued 2"),
+      ];
+
+      expect(internalQueueService.resolveAutoMixSeedTrack()?.videoId).toBe(
+        "queued-2",
+      );
+    });
+
+    test("should fall back to currentTrack then lastPlayedTrack for auto mix seed", () => {
+      const internalQueueService = queueService as unknown as {
+        queue: Track[];
+        currentTrack: Track | null;
+        lastPlayedTrack: Track | null;
+        resolveAutoMixSeedTrack: () => Track | null;
+      };
+
+      internalQueueService.queue = [];
+      internalQueueService.currentTrack = track("current", "Current");
+      internalQueueService.lastPlayedTrack = track("last", "Last");
+
+      expect(internalQueueService.resolveAutoMixSeedTrack()?.videoId).toBe(
+        "current",
+      );
+
+      internalQueueService.currentTrack = null;
+
+      expect(internalQueueService.resolveAutoMixSeedTrack()?.videoId).toBe(
+        "last",
+      );
+    });
+
+    test("should update the auto mix seed after queue reorder and removal", () => {
+      const internalQueueService = queueService as unknown as {
+        queue: Track[];
+        resolveAutoMixSeedTrack: () => Track | null;
+      };
+
+      internalQueueService.queue = [
+        track("track-1", "Track 1"),
+        track("track-2", "Track 2"),
+        track("track-3", "Track 3"),
+      ];
+
+      queueService.reorderQueue(0, 2);
+
+      expect(queueService.getQueue().map((item) => item.videoId)).toEqual([
+        "track-2",
+        "track-3",
+        "track-1",
+      ]);
+      expect(internalQueueService.resolveAutoMixSeedTrack()?.videoId).toBe(
+        "track-1",
+      );
+
+      queueService.removeFromQueue(2);
+
+      expect(queueService.getQueue().map((item) => item.videoId)).toEqual([
+        "track-2",
+        "track-3",
+      ]);
+      expect(internalQueueService.resolveAutoMixSeedTrack()?.videoId).toBe(
+        "track-3",
+      );
+    });
   });
 });

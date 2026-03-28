@@ -482,7 +482,7 @@ class QueueService {
 
       const filled = await this.ensureRadioTracks({
         immediatePlayback: true,
-        seedTrack: this.currentTrack ?? this.lastPlayedTrack,
+        seedTrack: this.resolveAutoMixSeedTrack(),
       });
 
       if (filled && this.queue.length > 0) {
@@ -1345,8 +1345,12 @@ class QueueService {
 
     void this.ensureRadioTracks({
       immediatePlayback: false,
-      seedTrack: this.currentTrack ?? this.lastPlayedTrack,
+      seedTrack: this.resolveAutoMixSeedTrack(),
     });
+  }
+
+  private resolveAutoMixSeedTrack(): Track | null {
+    return this.queue.at(-1) ?? this.currentTrack ?? this.lastPlayedTrack;
   }
 
   private async ensureRadioTracks(options: {
