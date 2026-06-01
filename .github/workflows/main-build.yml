@@ -1,0 +1,45 @@
+name: Main Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: main-build-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Main Build / Preflight
+    runs-on: arc-runner-set
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show build context
+        run: |
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "SHA: $GITHUB_SHA"
+          echo "Image tag will be:"
+          echo "10.32.20.51:30443/ci/youtube-music-bot:${GITHUB_SHA}"
+
+      - name: Check tools
+        run: |
+          echo "Checking available tools..."
+          node -v || true
+          npm -v || true
+          bun --version || true
+          docker version || true
+          buildctl --version || true
+          kubectl version --client || true
+
+      - name: Check Dockerfile
+        run: |
+          test -f Dockerfile
+          echo "Dockerfile exists."
