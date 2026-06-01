@@ -87,10 +87,12 @@ jobs:
         run: |
           set -o pipefail
 
-          echo "Building and pushing image:"
-          echo "${IMAGE_SHA}"
+          echo "BUILDKIT_HOST=${BUILDKIT_HOST}"
+          echo "IMAGE_SHA=${IMAGE_SHA}"
+          echo "SSL_CERT_FILE=${SSL_CERT_FILE}"
 
           buildctl --addr "${BUILDKIT_HOST}" build \
+            --progress=plain \
             --frontend dockerfile.v0 \
             --local context=. \
             --local dockerfile=. \
