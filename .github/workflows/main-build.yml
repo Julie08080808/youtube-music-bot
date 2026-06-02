@@ -53,6 +53,22 @@ jobs:
           echo "Memory:"
           free -h || true
 
+      - name: Check Kubernetes Access
+        run: |
+          set -euo pipefail
+
+          echo "Checking kubectl..."
+          kubectl version --client
+
+          echo "Checking Kubernetes permissions..."
+          kubectl auth can-i create namespace
+          kubectl auth can-i create deployment -A
+          kubectl auth can-i create service -A
+          kubectl auth can-i create job -A
+          kubectl auth can-i delete namespace
+
+          echo "Kubernetes access OK."
+
       - name: Prepare Image Metadata
         run: |
           set -euo pipefail
@@ -437,6 +453,179 @@ jobs:
             "${IMAGE_DIGEST}"
 
           echo "Image signature verified successfully."
+
+      - name: Deploy Ephemeral DAST Target
+        env:
+          HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+          HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          DAST_NAMESPACE="ci-dast-${SHORT_SHA}"
+          APP_NAME="youtube-music-bot"
+          APP_PORT="3000"
+          DAST_TARGET_URL="http://${APP_NAME}.${DAST_NAMESPACE}.svc.cluster.local:${APP_PORT}"
+
+          echo "DAST_NAMESPACE=${DAST_NAMESPACE}" >> "$GITHUB_ENV"
+          echo "DAST_TARGET_URL=${DAST_TARGET_URL}" >> "$GITHUB_ENV"
+
+          kubectl create namespace "${DAST_NAMESPACE}"
+
+          kubectl create secret docker-registry harbor-registry-secret \
+            -n "${DAST_NAMESPACE}" \
+            --docker-server="${REGISTRY}" \
+            --docker-username="${HARBOR_USERNAME}" \
+            --docker-password="${HARBOR_PASSWORD}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          cat << EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ${APP_NAME}
+            namespace: ${DAST_NAMESPACE}
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: ${APP_NAME}
+            template:
+              metadata:
+                labels:
+                  app: ${APP_NAME}
+              spec:
+                imagePullSecrets:
+                  - name: harbor-registry-secret
+                containers:
+                  - name: app
+                    image: ${IMAGE_DIGEST}
+                    ports:
+                      - containerPort: ${APP_PORT}
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: ${APP_NAME}
+            namespace: ${DAST_NAMESPACE}
+          spec:
+            type: ClusterIP
+            selector:
+              app: ${APP_NAME}
+            ports:
+              - name: http
+                port: ${APP_PORT}
+                targetPort: ${APP_PORT}
+          EOF
+
+          kubectl rollout status deployment/${APP_NAME} \
+            -n "${DAST_NAMESPACE}" \
+            --timeout=180s
+
+          echo "DAST target deployed: ${DAST_TARGET_URL}"
+
+      - name: Run OWASP ZAP Baseline Scan
+        run: |
+          set -euo pipefail
+
+          ZAP_JOB="zap-baseline"
+          ZAP_IMAGE="${REGISTRY}/ci/zap-stable:stable"
+
+          cat << EOF | kubectl apply -f -
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: ${ZAP_JOB}
+            namespace: ${DAST_NAMESPACE}
+          spec:
+            backoffLimit: 0
+            template:
+              spec:
+                restartPolicy: Never
+                imagePullSecrets:
+                  - name: harbor-registry-secret
+                containers:
+                  - name: zap
+                    image: ${ZAP_IMAGE}
+                    command:
+                      - zap-baseline.py
+                    args:
+                      - "-t"
+                      - "${DAST_TARGET_URL}"
+                      - "-J"
+                      - "/zap/wrk/zap-report.json"
+                      - "-r"
+                      - "/zap/wrk/zap-report.html"
+                      - "-w"
+                      - "/zap/wrk/zap-report.md"
+                    volumeMounts:
+                      - name: zap-work
+                        mountPath: /zap/wrk
+                volumes:
+                  - name: zap-work
+                    emptyDir: {}
+          EOF
+
+          echo "Waiting for ZAP job to finish..."
+
+          set +e
+          kubectl wait \
+            --for=condition=complete \
+            job/${ZAP_JOB} \
+            -n "${DAST_NAMESPACE}" \
+            --timeout=600s
+          WAIT_COMPLETE_STATUS=$?
+
+          if [ "$WAIT_COMPLETE_STATUS" -ne 0 ]; then
+            kubectl wait \
+              --for=condition=failed \
+              job/${ZAP_JOB} \
+              -n "${DAST_NAMESPACE}" \
+              --timeout=30s
+          fi
+          set -e
+
+          ZAP_POD="$(kubectl get pod -n "${DAST_NAMESPACE}" \
+            -l job-name="${ZAP_JOB}" \
+            -o jsonpath='{.items[0].metadata.name}')"
+
+          echo "ZAP pod: ${ZAP_POD}"
+
+          kubectl logs -n "${DAST_NAMESPACE}" "${ZAP_POD}" | tee zap-console.log
+
+          kubectl cp \
+            "${DAST_NAMESPACE}/${ZAP_POD}:/zap/wrk/zap-report.json" \
+            "zap-report-${SHORT_SHA}.json" || true
+
+          kubectl cp \
+            "${DAST_NAMESPACE}/${ZAP_POD}:/zap/wrk/zap-report.html" \
+            "zap-report-${SHORT_SHA}.html" || true
+
+          kubectl cp \
+            "${DAST_NAMESPACE}/${ZAP_POD}:/zap/wrk/zap-report.md" \
+            "zap-report-${SHORT_SHA}.md" || true
+
+          ls -lh zap-report-${SHORT_SHA}.* zap-console.log || true
+
+          JOB_FAILED="$(kubectl get job ${ZAP_JOB} -n "${DAST_NAMESPACE}" -o jsonpath='{.status.failed}' || true)"
+          JOB_SUCCEEDED="$(kubectl get job ${ZAP_JOB} -n "${DAST_NAMESPACE}" -o jsonpath='{.status.succeeded}' || true)"
+
+          echo "ZAP job succeeded=${JOB_SUCCEEDED:-0}, failed=${JOB_FAILED:-0}"
+
+          if [ "${JOB_SUCCEEDED:-0}" != "1" ]; then
+            echo "OWASP ZAP scan did not pass."
+            exit 1
+          fi
+
+          echo "OWASP ZAP baseline scan passed."
+
+      - name: Cleanup Ephemeral DAST Environment
+        if: always()
+        run: |
+          set -euo pipefail
+
+          if [ -n "${DAST_NAMESPACE:-}" ]; then
+            kubectl delete namespace "${DAST_NAMESPACE}" --ignore-not-found
+          fi
           
       - name: Upload Main Build Artifacts
         if: always()
@@ -449,6 +638,10 @@ jobs:
             sbom-*.spdx.json
             grype-*.json
             grype-*.txt
+            zap-console.log
+            zap-report-*.json
+            zap-report-*.html
+            zap-report-*.md
           if-no-files-found: warn
 
       - name: Write Build Summary
@@ -467,3 +660,5 @@ jobs:
           echo "| Grype JSON | \`${GRYPE_JSON:-not-generated}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Grype Table | \`${GRYPE_TABLE:-not-generated}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Cosign | \`signed and verified by digest\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| DAST Target | \`${DAST_TARGET_URL:-not-created}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| OWASP ZAP | \`baseline completed\` |" >> "$GITHUB_STEP_SUMMARY"
