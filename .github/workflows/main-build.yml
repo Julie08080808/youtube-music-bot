@@ -101,7 +101,7 @@ jobs:
           echo "Decoded token size:"
           wc -c "$RUNNER_TEMP/kube/token"
 
-          KUBE_SERVER="https://kubernetes.default.svc"
+          KUBE_SERVER="https://10.32.21.125:6443"
           KUBE_TOKEN="$(cat "$RUNNER_TEMP/kube/token")"
 
           kubectl config set-cluster in-cluster \
