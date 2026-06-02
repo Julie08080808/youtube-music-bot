@@ -104,7 +104,7 @@ jobs:
           echo "DOCKER_CONFIG=$HOME/.docker" >> "$GITHUB_ENV"
           echo "Harbor auth configured for ${REGISTRY}."
 
-      - name: Configure Harbor CA for buildctl client
+      - name: Configure Harbor CA for buildctl and Syft
         env:
           HARBOR_CA_CRT: ${{ secrets.HARBOR_CA_CRT }}
         run: |
@@ -121,7 +121,7 @@ jobs:
 
           echo "SSL_CERT_FILE=$RUNNER_TEMP/certs/harbor-ca.crt" >> "$GITHUB_ENV"
 
-          echo "Harbor CA configured for buildctl client."
+          echo "Harbor CA configured for buildctl and Syft client."
           grep "BEGIN CERTIFICATE" "$RUNNER_TEMP/certs/harbor-ca.crt"
 
       - name: Verify Harbor Auth Registry Key
@@ -224,7 +224,7 @@ jobs:
             --opt filename=Dockerfile \
             --output type=image,name="${IMAGE_SHA}",push=true
 
-            - name: Install Syft
+      - name: Install Syft
         run: |
           set -euo pipefail
 
