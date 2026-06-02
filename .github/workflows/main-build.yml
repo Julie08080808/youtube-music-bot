@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  REGISTRY: harbor.harbor.svc.cluster.local:80
+  REGISTRY: harbor.harbor.svc.cluster.local
   EXTERNAL_REGISTRY: 10.32.20.51:30443
   IMAGE_NAME: ci/youtube-music-bot
   BUILDKIT_HOST: tcp://buildkitd.ci-build.svc.cluster.local:1234
@@ -63,11 +63,11 @@ jobs:
           HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
           HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
         run: |
-          mkdir -p ~/.docker
+          mkdir -p "$HOME/.docker"
 
           AUTH="$(printf "%s:%s" "$HARBOR_USERNAME" "$HARBOR_PASSWORD" | base64 -w0)"
 
-          cat > ~/.docker/config.json << EOF
+          cat > "$HOME/.docker/config.json" << EOF
           {
             "auths": {
               "${REGISTRY}": {
@@ -77,7 +77,8 @@ jobs:
           }
           EOF
 
-          echo "Harbor auth configured."
+          echo "DOCKER_CONFIG=$HOME/.docker" >> "$GITHUB_ENV"
+          echo "Harbor auth configured for ${REGISTRY}."
 
       - name: Check Dockerfile
         run: |
@@ -89,7 +90,9 @@ jobs:
           set -o pipefail
 
           echo "BUILDKIT_HOST=${BUILDKIT_HOST}"
+          echo "REGISTRY=${REGISTRY}"
           echo "IMAGE_SHA=${IMAGE_SHA}"
+          echo "DOCKER_CONFIG=${DOCKER_CONFIG}"
 
           buildctl --addr "${BUILDKIT_HOST}" build \
             --progress=plain \
@@ -97,7 +100,7 @@ jobs:
             --local context=. \
             --local dockerfile=. \
             --opt filename=Dockerfile \
-            --output type=image,name="${IMAGE_SHA}",push=true
+            --output type=image,name="${IMAGE_SHA}",push=true,registry.insecure=true
 
       - name: Write Build Summary
         if: always()
