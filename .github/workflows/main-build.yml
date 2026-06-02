@@ -1,4 +1,3 @@
-```yaml
 name: Main Build
 
 on:
@@ -14,8 +13,6 @@ permissions:
   contents: read
 
 env:
-  # 正式 Harbor HTTPS 入口
-  # BuildKit image rootless-ca 已經內建 harbor-ca.crt
   REGISTRY: 10.32.20.51:30443
 
   IMAGE_NAME: ci/youtube-music-bot
@@ -192,4 +189,3 @@ jobs:
           echo "| Image SHA | \`${IMAGE_SHA}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Image Latest | \`${IMAGE_LATEST}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| BuildKit Host | \`${BUILDKIT_HOST}\` |" >> "$GITHUB_STEP_SUMMARY"
-```
