@@ -13,7 +13,8 @@ permissions:
   contents: read
 
 env:
-  REGISTRY: 10.32.20.51:30443
+  REGISTRY: harbor.harbor.svc.cluster.local:80
+  EXTERNAL_REGISTRY: 10.32.20.51:30443
   IMAGE_NAME: ci/youtube-music-bot
   BUILDKIT_HOST: tcp://buildkitd.ci-build.svc.cluster.local:1234
 
@@ -48,14 +49,14 @@ jobs:
           SHORT_SHA="${GITHUB_SHA::7}"
 
           IMAGE_SHA="${REGISTRY}/${IMAGE_NAME}:${SHORT_SHA}"
-          IMAGE_LATEST="${REGISTRY}/${IMAGE_NAME}:latest"
+          IMAGE_EXTERNAL="${EXTERNAL_REGISTRY}/${IMAGE_NAME}:${SHORT_SHA}"
 
           echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
           echo "IMAGE_SHA=${IMAGE_SHA}" >> "$GITHUB_ENV"
-          echo "IMAGE_LATEST=${IMAGE_LATEST}" >> "$GITHUB_ENV"
+          echo "IMAGE_EXTERNAL=${IMAGE_EXTERNAL}" >> "$GITHUB_ENV"
 
-          echo "Image SHA tag: ${IMAGE_SHA}"
-          echo "Image latest tag: ${IMAGE_LATEST}"
+          echo "Internal push image: ${IMAGE_SHA}"
+          echo "External pull image: ${IMAGE_EXTERNAL}"
 
       - name: Configure Harbor Auth
         env:
@@ -89,7 +90,6 @@ jobs:
 
           echo "BUILDKIT_HOST=${BUILDKIT_HOST}"
           echo "IMAGE_SHA=${IMAGE_SHA}"
-          echo "SSL_CERT_FILE=${SSL_CERT_FILE}"
 
           buildctl --addr "${BUILDKIT_HOST}" build \
             --progress=plain \
