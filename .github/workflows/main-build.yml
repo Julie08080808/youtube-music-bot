@@ -1,4 +1,3 @@
-```yaml
 name: Main Build
 
 on:
@@ -244,4 +243,3 @@ jobs:
           echo "| Image | \`${IMAGE_SHA}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Short SHA | \`${SHORT_SHA}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| BuildKit Host | \`${BUILDKIT_HOST}\` |" >> "$GITHUB_STEP_SUMMARY"
-```
