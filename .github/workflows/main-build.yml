@@ -317,19 +317,6 @@ jobs:
           echo "Resolved image digest:"
           echo "${IMAGE_DIGEST}"
 
-      - name: Install Syft
-        run: |
-          set -euo pipefail
-
-          mkdir -p "$RUNNER_TEMP/bin"
-
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b "$RUNNER_TEMP/bin"
-
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-
-          "$RUNNER_TEMP/bin/syft" version
-
       - name: Export Image OCI Archive with BuildKit
         run: |
           set -euo pipefail
@@ -369,19 +356,6 @@ jobs:
           echo "SBOM generated: ${SBOM_FILE}"
           ls -lh "${SBOM_FILE}"
 
-      - name: Install Grype
-        run: |
-          set -euo pipefail
-
-          mkdir -p "$RUNNER_TEMP/bin"
-
-          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh \
-            | sh -s -- -b "$RUNNER_TEMP/bin"
-
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-
-          "$RUNNER_TEMP/bin/grype" version
-
       - name: Scan SBOM with Grype
         continue-on-error: true
         run: |
@@ -404,24 +378,6 @@ jobs:
 
           echo "Grype reports generated:"
           ls -lh "${GRYPE_JSON}" "${GRYPE_TABLE}"
-
-      - name: Install Cosign
-        run: |
-          set -euo pipefail
-
-          mkdir -p "$RUNNER_TEMP/bin"
-
-          COSIGN_VERSION="v2.4.1"
-
-          curl -sSfL \
-            "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64" \
-            -o "$RUNNER_TEMP/bin/cosign"
-
-          chmod +x "$RUNNER_TEMP/bin/cosign"
-
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-
-          "$RUNNER_TEMP/bin/cosign" version
 
       - name: Configure Cosign Key
         env:
