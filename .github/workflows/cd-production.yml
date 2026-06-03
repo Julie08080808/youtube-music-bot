@@ -178,7 +178,9 @@ jobs:
           echo "Before production update:"
           cat "${PRODUCTION_KUSTOMIZATION}"
 
-          GITOPS_KUSTOMIZATION="${PRODUCTION_KUSTOMIZATION}" python3 - << 'PY'
+          STAGING_DIGEST="${STAGING_DIGEST}" \
+          GITOPS_KUSTOMIZATION="${PRODUCTION_KUSTOMIZATION}" \
+          python3 - << 'PY'
           import os
           import re
           from pathlib import Path
