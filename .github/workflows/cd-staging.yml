@@ -22,12 +22,20 @@ env:
   IMAGE_NAME: ci/youtube-music-bot
   APP_NAME: youtube-music-bot
   APP_PORT: "3000"
+
   STAGING_NAMESPACE: staging-youtube-music-bot
   STAGING_NODE_PORT: "31081"
 
+  ARGOCD_NAMESPACE: argocd
+  ARGOCD_STAGING_APP: youtube-music-bot-staging
+
+  GITOPS_REPO_URL: https://github.com/Julie08080808/youtube-music-bot-gitops.git
+  GITOPS_REPO_BRANCH: main
+  GITOPS_STAGING_PATH: apps/youtube-music-bot/overlays/staging
+
 jobs:
   deploy-staging:
-    name: Deploy to VM3 Staging
+    name: Update GitOps Staging
     runs-on: arc-runner-set
     timeout-minutes: 20
     environment: staging
@@ -86,22 +94,6 @@ jobs:
           echo "Current context:"
           kubectl config current-context
 
-      - name: Check VM3 Node Label
-        run: |
-          set -euo pipefail
-
-          echo "Checking node3 labels..."
-          kubectl get node node3 --show-labels
-
-          NODE3_DEDICATED="$(kubectl get node node3 -o jsonpath='{.metadata.labels.dedicated}')"
-
-          if [ "${NODE3_DEDICATED}" != "production-storage" ]; then
-            echo "node3 does not have label dedicated=production-storage"
-            exit 1
-          fi
-
-          echo "node3 label OK: dedicated=production-storage"
-
       - name: Download Main Build Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -127,142 +119,173 @@ jobs:
           echo "Image metadata:"
           cat "${IMAGE_METADATA}"
 
+          SHORT_SHA="$(grep -E '^SHORT_SHA=' "${IMAGE_METADATA}" | tail -1 | sed 's/^SHORT_SHA=//')"
+          IMAGE_DIGEST_VALUE="$(grep -E '^IMAGE_DIGEST_VALUE=' "${IMAGE_METADATA}" | tail -1 | sed 's/^IMAGE_DIGEST_VALUE=//')"
           IMAGE_DIGEST="$(grep -E '^IMAGE_DIGEST=' "${IMAGE_METADATA}" | tail -1 | sed 's/^IMAGE_DIGEST=//')"
 
-          if [ -z "${IMAGE_DIGEST}" ]; then
-            echo "IMAGE_DIGEST not found in image-metadata.txt."
+          if [ -z "${SHORT_SHA}" ] || [ -z "${IMAGE_DIGEST_VALUE}" ] || [ -z "${IMAGE_DIGEST}" ]; then
+            echo "Failed to resolve image metadata."
             exit 1
           fi
 
+          case "${IMAGE_DIGEST}" in
+            ${REGISTRY}/${IMAGE_NAME}@sha256:*)
+              echo "Image digest format OK."
+              ;;
+            *)
+              echo "Invalid image digest format."
+              echo "IMAGE_DIGEST=${IMAGE_DIGEST}"
+              exit 1
+              ;;
+          esac
+
+          echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
+          echo "IMAGE_DIGEST_VALUE=${IMAGE_DIGEST_VALUE}" >> "$GITHUB_ENV"
           echo "IMAGE_DIGEST=${IMAGE_DIGEST}" >> "$GITHUB_ENV"
 
           echo "Resolved staging image:"
           echo "${IMAGE_DIGEST}"
 
-      - name: Check NodePort Availability
-        run: |
-          set -euo pipefail
-
-          echo "Checking whether NodePort ${STAGING_NODE_PORT} is already used..."
-
-          USED_BY="$(kubectl get svc -A -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{" "}{range .spec.ports[*]}{.nodePort}{" "}{end}{"\n"}{end}' \
-            | awk -v port="${STAGING_NODE_PORT}" '$0 ~ port {print $1 "/" $2}' || true)"
-
-          if [ -n "${USED_BY}" ]; then
-            echo "NodePort ${STAGING_NODE_PORT} is used by:"
-            echo "${USED_BY}"
-
-            if echo "${USED_BY}" | grep -qx "${STAGING_NAMESPACE}/${APP_NAME}"; then
-              echo "NodePort is already used by the same staging service. OK."
-            else
-              echo "NodePort ${STAGING_NODE_PORT} is used by another service."
-              exit 1
-            fi
-          else
-            echo "NodePort ${STAGING_NODE_PORT} is available."
-          fi
-
-      - name: Deploy Staging to VM3
+      - name: Update GitOps Staging Digest
         env:
-          HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
-          HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
+          GITOPS_REPO_TOKEN: ${{ secrets.GITOPS_REPO_TOKEN }}
         run: |
           set -euo pipefail
 
-          if [ -z "${HARBOR_USERNAME:-}" ] || [ -z "${HARBOR_PASSWORD:-}" ]; then
-            echo "HARBOR_USERNAME or HARBOR_PASSWORD is empty."
+          if [ -z "${GITOPS_REPO_TOKEN:-}" ]; then
+            echo "GITOPS_REPO_TOKEN is empty."
             exit 1
           fi
 
-          echo "Deploying image to VM3 staging:"
-          echo "${IMAGE_DIGEST}"
+          GITOPS_DIR="$RUNNER_TEMP/gitops"
 
-          kubectl create namespace "${STAGING_NAMESPACE}" \
-            --dry-run=client -o yaml | kubectl apply -f -
+          echo "Cloning GitOps repo..."
+          git clone \
+            --branch "${GITOPS_REPO_BRANCH}" \
+            "https://x-access-token:${GITOPS_REPO_TOKEN}@github.com/Julie08080808/youtube-music-bot-gitops.git" \
+            "${GITOPS_DIR}"
 
-          kubectl create secret docker-registry harbor-registry-secret \
-            -n "${STAGING_NAMESPACE}" \
-            --docker-server="${REGISTRY}" \
-            --docker-username="${HARBOR_USERNAME}" \
-            --docker-password="${HARBOR_PASSWORD}" \
-            --dry-run=client -o yaml | kubectl apply -f -
+          cd "${GITOPS_DIR}"
 
-          cat << EOF | kubectl apply -f -
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: ${APP_NAME}
-            namespace: ${STAGING_NAMESPACE}
-            labels:
-              app: ${APP_NAME}
-              environment: staging
-          spec:
-            replicas: 1
-            selector:
-              matchLabels:
-                app: ${APP_NAME}
-            template:
-              metadata:
-                labels:
-                  app: ${APP_NAME}
-                  environment: staging
-                annotations:
-                  jlsa.dev/image-digest: "${IMAGE_DIGEST}"
-              spec:
-                nodeSelector:
-                  dedicated: production-storage
-                imagePullSecrets:
-                  - name: harbor-registry-secret
-                containers:
-                  - name: app
-                    image: ${IMAGE_DIGEST}
-                    ports:
-                      - containerPort: ${APP_PORT}
-                    readinessProbe:
-                      httpGet:
-                        path: /
-                        port: ${APP_PORT}
-                      initialDelaySeconds: 5
-                      periodSeconds: 10
-                      failureThreshold: 6
-                    livenessProbe:
-                      httpGet:
-                        path: /
-                        port: ${APP_PORT}
-                      initialDelaySeconds: 20
-                      periodSeconds: 20
-                      failureThreshold: 3
-          ---
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: ${APP_NAME}
-            namespace: ${STAGING_NAMESPACE}
-            labels:
-              app: ${APP_NAME}
-              environment: staging
-          spec:
-            type: NodePort
-            selector:
-              app: ${APP_NAME}
-            ports:
-              - name: http
-                port: ${APP_PORT}
-                targetPort: ${APP_PORT}
-                nodePort: ${STAGING_NODE_PORT}
-          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          KUSTOMIZATION="${GITOPS_STAGING_PATH}/kustomization.yaml"
+
+          if [ ! -f "${KUSTOMIZATION}" ]; then
+            echo "Kustomization file not found: ${KUSTOMIZATION}"
+            exit 1
+          fi
+
+          echo "Before update:"
+          cat "${KUSTOMIZATION}"
+
+          GITOPS_KUSTOMIZATION="${KUSTOMIZATION}" python3 - << 'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path(os.environ["GITOPS_KUSTOMIZATION"])
+          digest = os.environ["IMAGE_DIGEST_VALUE"]
+
+          text = path.read_text()
+
+          new_text, count = re.subn(
+              r'(^\s*digest:\s*).+$',
+              r'\1' + digest,
+              text,
+              count=1,
+              flags=re.MULTILINE,
+          )
+
+          if count != 1:
+              raise SystemExit("Failed to update digest line in kustomization.yaml")
+
+          path.write_text(new_text)
+          PY
+
+          echo "After update:"
+          cat "${KUSTOMIZATION}"
+
+          git status --short
+
+          if git diff --quiet; then
+            echo "GitOps staging digest already up to date."
+            exit 0
+          fi
+
+          git add "${KUSTOMIZATION}"
+          git commit -m "gitops: promote ${SHORT_SHA} to staging"
+          git push origin "${GITOPS_REPO_BRANCH}"
+
+          echo "GitOps staging digest updated."
+
+      - name: Wait for Argo CD Staging Sync
+        run: |
+          set -euo pipefail
+
+          echo "Requesting Argo CD hard refresh..."
+
+          kubectl annotate application "${ARGOCD_STAGING_APP}" \
+            -n "${ARGOCD_NAMESPACE}" \
+            argocd.argoproj.io/refresh=hard \
+            --overwrite
+
+          echo "Waiting for Argo CD app to become Synced and Healthy..."
+
+          for i in $(seq 1 90); do
+            SYNC_STATUS="$(kubectl get application "${ARGOCD_STAGING_APP}" \
+              -n "${ARGOCD_NAMESPACE}" \
+              -o jsonpath='{.status.sync.status}' 2>/dev/null || true)"
+
+            HEALTH_STATUS="$(kubectl get application "${ARGOCD_STAGING_APP}" \
+              -n "${ARGOCD_NAMESPACE}" \
+              -o jsonpath='{.status.health.status}' 2>/dev/null || true)"
+
+            echo "Attempt ${i}: sync=${SYNC_STATUS:-unknown}, health=${HEALTH_STATUS:-unknown}"
+
+            if [ "${SYNC_STATUS}" = "Synced" ] && [ "${HEALTH_STATUS}" = "Healthy" ]; then
+              echo "Argo CD staging app is Synced and Healthy."
+              break
+            fi
+
+            sleep 5
+          done
+
+          SYNC_STATUS="$(kubectl get application "${ARGOCD_STAGING_APP}" \
+            -n "${ARGOCD_NAMESPACE}" \
+            -o jsonpath='{.status.sync.status}')"
+
+          HEALTH_STATUS="$(kubectl get application "${ARGOCD_STAGING_APP}" \
+            -n "${ARGOCD_NAMESPACE}" \
+            -o jsonpath='{.status.health.status}')"
+
+          if [ "${SYNC_STATUS}" != "Synced" ] || [ "${HEALTH_STATUS}" != "Healthy" ]; then
+            echo "Argo CD staging app did not become Synced and Healthy."
+            kubectl describe application "${ARGOCD_STAGING_APP}" -n "${ARGOCD_NAMESPACE}"
+            exit 1
+          fi
+
+      - name: Verify Staging Deployment
+        run: |
+          set -euo pipefail
+
+          echo "Waiting for staging rollout..."
           kubectl rollout status deployment/${APP_NAME} \
             -n "${STAGING_NAMESPACE}" \
             --timeout=180s
 
-          echo "Staging resources:"
-          kubectl get pods -n "${STAGING_NAMESPACE}" -o wide
-          kubectl get svc -n "${STAGING_NAMESPACE}"
+          LIVE_IMAGE="$(kubectl get deployment "${APP_NAME}" \
+            -n "${STAGING_NAMESPACE}" \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')"
 
-      - name: Verify Staging Pod Runs on VM3
-        run: |
-          set -euo pipefail
+          echo "Expected image: ${IMAGE_DIGEST}"
+          echo "Live image:     ${LIVE_IMAGE}"
+
+          if [ "${LIVE_IMAGE}" != "${IMAGE_DIGEST}" ]; then
+            echo "Staging live image does not match expected image."
+            exit 1
+          fi
 
           POD_NODE="$(kubectl get pod -n "${STAGING_NAMESPACE}" \
             -l app="${APP_NAME}" \
@@ -275,7 +298,8 @@ jobs:
             exit 1
           fi
 
-          echo "Staging pod is running on VM3/node3."
+          kubectl get pods -n "${STAGING_NAMESPACE}" -o wide
+          kubectl get svc -n "${STAGING_NAMESPACE}"
 
       - name: Smoke Test Staging
         run: |
@@ -305,13 +329,15 @@ jobs:
       - name: Write Staging Summary
         if: always()
         run: |
-          echo "## CD Staging Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "## GitOps CD Staging Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Item | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
           echo "| Namespace | \`${STAGING_NAMESPACE}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| App | \`${APP_NAME}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Image Digest | \`${IMAGE_DIGEST:-not-resolved}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Argo CD App | \`${ARGOCD_STAGING_APP}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| GitOps Path | \`${GITOPS_STAGING_PATH}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Node Selector | \`dedicated=production-storage\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Expected Node | \`node3\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Cluster URL | \`http://${APP_NAME}.${STAGING_NAMESPACE}.svc.cluster.local:${APP_PORT}\` |" >> "$GITHUB_STEP_SUMMARY"
